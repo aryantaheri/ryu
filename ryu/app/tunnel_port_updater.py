@@ -34,12 +34,15 @@ from ryu.lib.ovs import bridge as ovs_bridge
 
 CONF = cfg.CONF
 CONF.register_opts([
-    cfg.StrOpt('tunnel-type', default='gre',
-               help='tunnel type for ovs tunnel port')
+#    cfg.StrOpt('tunnel-type', default='gre',
+#               help='tunnel type for ovs tunnel port')
+    cfg.StrOpt('tunnel-type', default='ipsec_gre',
+               help='tunnel type for ovs ipsec_gre tunnel port')
 ])
 
 _TUNNEL_TYPE_TO_NW_ID = {
     'gre': rest_nw_id.NW_ID_VPORT_GRE,
+    'ipsec_gre': rest_nw_id.NW_ID_VPORT_IPSEC_GRE,
 }
 
 

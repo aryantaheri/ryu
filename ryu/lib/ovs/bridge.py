@@ -169,11 +169,27 @@ class OVSBridge(object):
         self.run_command([command])
         return command.result
 
+#     def add_tunnel_port(self, name, tunnel_type, local_ip, remote_ip,
+#                         key=None):
+#         options = 'local_ip=%(local_ip)s,remote_ip=%(remote_ip)s' % locals()
+#         if key:
+#             options += ',key=%(key)s' % locals()
+# 
+#         command_add = ovs_vsctl.VSCtlCommand('add-port', (self.br_name, name))
+#         command_set = ovs_vsctl.VSCtlCommand(
+#             'set', ('Interface', name,
+#                     'type=%s' % tunnel_type, 'options=%s' % options))
+#         self.run_command([command_add, command_set])
+
     def add_tunnel_port(self, name, tunnel_type, local_ip, remote_ip,
                         key=None):
         options = 'local_ip=%(local_ip)s,remote_ip=%(remote_ip)s' % locals()
         if key:
             options += ',key=%(key)s' % locals()
+#        TODO: Use constants for tunnels types
+        if tunnel_type == 'ipsec_gre':
+            ipsec_psk = 'mypsk'
+            options += ',psk=%s' % ipsec_psk
 
         command_add = ovs_vsctl.VSCtlCommand('add-port', (self.br_name, name))
         command_set = ovs_vsctl.VSCtlCommand(
