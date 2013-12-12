@@ -104,6 +104,10 @@ class TunnelPort(object):
                 self.remote_ip == other.remote_ip and
                 self.remote_dpid == other.remote_dpid and
                 self.netword_id == other.netword_id)
+        
+    def __str__(self):
+        return "TunnelPort: dpid=%s, port_no=%s, local_ip=%s, remote_ip=%s, remote_dpid=%s, network_id=%s" % (
+            self.dpid, self.port_no, self.local_ip, self.remote_ip, self.remote_dpid, self.network_id)
 
 
 class TunnelDP(object):
@@ -258,7 +262,8 @@ class TunnelDP(object):
         if self._virtual_network_tunnel_port_exists(remote_dpid, remote_ip, network_id):
             self.logger.debug('_add_virtual_network_tunnel_port nop')
             return
-
+        self.logger.debug('_add_virtual_network_tunnel_port available tunnels: %s', self.tunnels.values())
+        
         self.logger.debug('_add_virtual_network_tunnel_port creating port')
         port_name = self._port_name(self.tunnel_ip, remote_ip, network_id)
         self.ovs_bridge.add_tunnel_port(port_name, self.tunnel_type,
@@ -268,7 +273,7 @@ class TunnelDP(object):
         self.tunnels[tp.ofport] = TunnelPort(self.dpid, tp.ofport,
                                              tp.local_ip, tp.remote_ip,
                                              remote_dpid, network_id)
-        
+        self.logger.debug('_add_virtual_network_tunnel_port retrieved TunnelPort %s', self.tunnels[tp.ofport]) 
         # FIXME: This may need special consideration
         self.network_api.create_port(self.tunnel_nw_id, self.dpid, tp.ofport)
         self.tunnel_api.create_remote_dpid(self.dpid, tp.ofport, remote_dpid)

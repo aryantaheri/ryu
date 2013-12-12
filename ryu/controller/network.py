@@ -41,6 +41,9 @@ class EventNetworkPort(event.EventBase):
         self.dpid = dpid
         self.port_no = port_no
         self.add_del = add_del
+    
+    def __str__(self):
+        return 'EventNetworkPort(network_id={0}, dpid={1}, port_no={2}, add_del={3})'.format(self.network_id, self.dpid, self.port_no, self.add_del)
 
 
 class EventMacAddress(event.EventBase):
@@ -335,6 +338,7 @@ class Network(app_manager.RyuApp):
         self._check_nw_id_unknown(network_id)
         try:
             old_network_id = self.dpids.get_network_safe(dpid, port)
+            self.logger.debug('Network._update_port old_network_id %s known %s', old_network_id, _known_nw_id(old_network_id))
             if (self.networks.has_port(network_id, dpid, port) or
                     _known_nw_id(old_network_id)):
                 if not port_may_exist:
