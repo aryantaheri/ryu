@@ -88,20 +88,22 @@ class TunnelAPI(object):
 
 
 class TunnelPort(object):
-    def __init__(self, dpid, port_no, local_ip, remote_ip, remote_dpid=None):
+    def __init__(self, dpid, port_no, local_ip, remote_ip, remote_dpid=None, network_id=None):
         super(TunnelPort, self).__init__()
         self.dpid = dpid
         self.port_no = port_no
         self.local_ip = local_ip
         self.remote_ip = remote_ip
         self.remote_dpid = remote_dpid
+        self.netword_id = network_id
 
     def __eq__(self, other):
         return (self.dpid == other.dpid and
                 self.port_no == other.port_no and
                 self.local_ip == other.local_ip and
                 self.remote_ip == other.remote_ip and
-                self.remote_dpid == other.remote_dpid)
+                self.remote_dpid == other.remote_dpid and
+                self.netword_id == other.netword_id)
 
 
 class TunnelDP(object):
@@ -135,6 +137,7 @@ class TunnelDP(object):
 
             remote_dpid = self.conf_switch.find_dpid(cs_key.OVS_TUNNEL_ADDR,
                                                      tp.remote_ip)
+            self.logger.warn('Adding TunnelPort without known network uuid dpid_ip=%s port=%s remote_ip=%s ', self.tunnel_ip, tp.ofport, tp.remote_ip)
             self.tunnels[tp.ofport] = TunnelPort(self.dpid, tp.ofport,
                                                  self.tunnel_ip, tp.remote_ip,
                                                  remote_dpid)
@@ -205,22 +208,32 @@ class TunnelDP(object):
         return "%02x%02x%02x%02x" % netaddr.IPAddress(ip_addr).words
 
     @staticmethod
-    def _port_name(local_ip, remote_ip):
+    def _port_name(local_ip, remote_ip, network_id=None):
         # ovs requires requires less or equals to 14 bytes length
         # gre<remote>-<local lsb>
         _PORT_NAME_LENGTH = 14
-        local_hex = TunnelDP._to_hex(local_ip)
-        remote_hex = TunnelDP._to_hex(remote_ip)
-        return ("gre%s-%s" % (remote_hex, local_hex))[:_PORT_NAME_LENGTH]
-
+        if network_id is None:
+            local_hex = TunnelDP._to_hex(local_ip)
+            remote_hex = TunnelDP._to_hex(remote_ip)
+            return ("gre%s-%s" % (remote_hex, local_hex))[:_PORT_NAME_LENGTH]
+        else:
+            #collision is probable because of network uuid truncation
+            remote_hex = TunnelDP._to_hex(remote_ip)
+            return ("gre%s%s" % (remote_hex, network_id))[:_PORT_NAME_LENGTH]
+    
     def _tunnel_port_exists(self, remote_dpid, remote_ip):
         return any(tp.remote_dpid == remote_dpid and tp.remote_ip == remote_ip
+                   for tp in self.tunnels.values())
+        
+    def _virtual_network_tunnel_port_exists(self, remote_dpid, remote_ip, network_id):
+        return any(tp.remote_dpid == remote_dpid and tp.remote_ip == remote_ip and tp.network_id == network_id
                    for tp in self.tunnels.values())
 
     def _add_tunnel_port(self, remote_dpid, remote_ip):
         self.logger.debug('add_tunnel_port local %s %s remote %s %s',
                           dpid_lib.dpid_to_str(self.dpid), self.tunnel_ip,
                           dpid_lib.dpid_to_str(remote_dpid), remote_ip)
+        self.logger.error('Method _add_tunnel_port is deprecated, update the code. Request will be handled')
         if self._tunnel_port_exists(remote_dpid, remote_ip):
             self.logger.debug('add_tunnel_port nop')
             return
@@ -234,6 +247,29 @@ class TunnelDP(object):
         self.tunnels[tp.ofport] = TunnelPort(self.dpid, tp.ofport,
                                              tp.local_ip, tp.remote_ip,
                                              remote_dpid)
+        self.network_api.create_port(self.tunnel_nw_id, self.dpid, tp.ofport)
+        self.tunnel_api.create_remote_dpid(self.dpid, tp.ofport, remote_dpid)
+        return tp
+
+    def _add_virtual_network_tunnel_port(self, remote_dpid, remote_ip, network_id):
+        self.logger.debug('_add_virtual_network_tunnel_port local %s %s remote %s %s network %s',
+                          dpid_lib.dpid_to_str(self.dpid), self.tunnel_ip,
+                          dpid_lib.dpid_to_str(remote_dpid), remote_ip, network_id)
+        if self._virtual_network_tunnel_port_exists(remote_dpid, remote_ip, network_id):
+            self.logger.debug('_add_virtual_network_tunnel_port nop')
+            return
+
+        self.logger.debug('_add_virtual_network_tunnel_port creating port')
+        port_name = self._port_name(self.tunnel_ip, remote_ip, network_id)
+        self.ovs_bridge.add_tunnel_port(port_name, self.tunnel_type,
+                                        self.tunnel_ip, remote_ip, 'flow')
+
+        tp = self.ovs_bridge.get_tunnel_port(port_name, self.tunnel_type)
+        self.tunnels[tp.ofport] = TunnelPort(self.dpid, tp.ofport,
+                                             tp.local_ip, tp.remote_ip,
+                                             remote_dpid, network_id)
+        
+        # FIXME: This may need special consideration
         self.network_api.create_port(self.tunnel_nw_id, self.dpid, tp.ofport)
         self.tunnel_api.create_remote_dpid(self.dpid, tp.ofport, remote_dpid)
         return tp
@@ -255,6 +291,8 @@ class TunnelDP(object):
                                                  ('remote_dpid', 'remote_ip'))
     _RequestAddTunnelPort = collections.namedtuple('_RequestAddTunnelPort',
                                                   ('remote_dpid', 'remote_ip'))
+    _RequestAddVirtualNetworkTunnelPort = collections.namedtuple('_RequestAddVirtualNetworkTunnelPort',
+                                                  ('remote_dpid', 'remote_ip', 'network_id'))
     _RequestDelTunnelPort = collections.namedtuple('_RequestDelTunnelPort',
                                                   ('remote_ip'))
 
@@ -266,6 +304,9 @@ class TunnelDP(object):
 
     def request_add_tunnel_port(self, remote_dpid, remote_ip):
         self.req_q.put(self._RequestAddTunnelPort(remote_dpid, remote_ip))
+
+    def request_add_virtual_network_tunnel_port(self, remote_dpid, remote_ip, network_id):
+        self.req_q.put(self._RequestAddVirtualNetworkTunnelPort(remote_dpid, remote_ip, network_id))
 
     def request_del_tunnel_port(self, remote_ip):
         self.req_q.put(self._RequestDelTunnelPort(remote_ip))
@@ -312,7 +353,11 @@ class TunnelDP(object):
                     self._update_remote(req.remote_dpid, req.remote_ip)
                 elif isinstance(req, self._RequestAddTunnelPort):
                     self.logger.debug('add_tunnel_port')
-                    self._add_tunnel_port(req.remote_dpid, req.remote_ip)
+                    self.logger.error('Deprecated _RequestAddTunnelPort is received, ignoring it. remote_ip=%s', req.remote_ip)
+                    #self._add_tunnel_port(req.remote_dpid, req.remote_ip)
+                elif isinstance(req, self._RequestAddVirtualNetworkTunnelPort):
+                    self.logger.debug('_add_virtual_network_tunnel_port')
+                    self._add_virtual_network_tunnel_port(req.remote_dpid, req.remote_ip, req.network_id)
                 elif isinstance(req, self._RequestDelTunnelPort):
                     self.logger.debug('del_tunnel_port')
                     self._del_tunnel_port_ip(req.remote_ip)
@@ -346,6 +391,17 @@ class TunnelRequests(dict):
     def get_remote(self, dpid):
         return self.setdefault(dpid, set())
 
+class VirtualNetworkTunnelRequests(dict):
+    def add(self, dpid0, dpid1, network_id):
+        self.setdefault(dpid0, set()).add((dpid1, network_id))
+        self.setdefault(dpid1, set()).add((dpid0, network_id))
+
+    def remove(self, dpid0, dpid1, network_id):
+        self[dpid0].remove((dpid1, network_id))
+        self[dpid1].remove((dpid0, network_id))
+
+    def get_remote(self, dpid):
+        return self.setdefault(dpid, set())
 
 class TunnelPortUpdater(app_manager.RyuApp):
     _CONTEXTS = {
@@ -361,7 +417,9 @@ class TunnelPortUpdater(app_manager.RyuApp):
         self.nw = kwargs['network']
         self.tunnels = kwargs['tunnels']
         self.tunnel_dpset = TunnelDPSet()
+        # TODO(Aryan): To be removed
         self.tunnel_requests = TunnelRequests()
+        self.virtual_network_tunnel_requests = VirtualNetworkTunnelRequests()
 
         self.network_api = NetworkAPI(self.nw)
         self.tunnel_api = TunnelAPI(self.tunnels)
@@ -382,8 +440,11 @@ class TunnelPortUpdater(app_manager.RyuApp):
 
         tunnel_dp = self.tunnel_dpset.get(dpid)
         assert tunnel_dp
-        self._add_tunnel_ports(tunnel_dp,
-                               self.tunnel_requests.get_remote(dpid))
+        #self._add_tunnel_ports(tunnel_dp,
+        #                       self.tunnel_requests.get_remote(dpid))
+        remote_dpids = self.virtual_network_tunnel_requests.get_remote(dpid);
+        for remote_dpid, network_id in remote_dpids:
+            self._add_virtual_network_tunnel_ports(tunnel_dp, remote_dpid, network_id)
 
     @handler.set_ev_cls(conf_switch.EventConfSwitchSet)
     def conf_switch_set_handler(self, ev):
@@ -406,8 +467,10 @@ class TunnelPortUpdater(app_manager.RyuApp):
         # TODO:XXX
         pass
 
+    # Deprecated
     def _add_tunnel_ports(self, tunnel_dp, remote_dpids):
         self.logger.debug('_add_tunnel_ports %s %s', tunnel_dp, remote_dpids)
+        self.logger.error('_add_tunnel_ports is deprecated')
         for remote_dpid in remote_dpids:
             remote_dp = self.tunnel_dpset.get(remote_dpid)
             if remote_dp is None:
@@ -416,6 +479,15 @@ class TunnelPortUpdater(app_manager.RyuApp):
                                               remote_dp.tunnel_ip)
             remote_dp.request_add_tunnel_port(tunnel_dp.dpid,
                                               tunnel_dp.tunnel_ip)
+            
+    def _add_virtual_network_tunnel_ports(self, tunnel_dp, remote_dpids, network_id):
+        self.logger.debug('_add_virtual_network_tunnel_ports %s %s %s', tunnel_dp, remote_dpids, network_id)
+        for remote_dpid in remote_dpids:
+            remote_dp = self.tunnel_dpset.get(remote_dpid)
+            if remote_dp is None:
+                continue
+            tunnel_dp.request_add_virtual_network_tunnel_port(remote_dp.dpid, remote_dp.tunnel_ip, network_id)
+            remote_dp.request_add_virtual_network_tunnel_port(tunnel_dp.dpid, tunnel_dp.tunnel_ip, network_id)
 
     def _vm_port_add(self, network_id, dpid):
         self.logger.debug('_vm_port_add %s %s', network_id,
@@ -423,12 +495,14 @@ class TunnelPortUpdater(app_manager.RyuApp):
         dpids = self.nw.get_dpids(network_id)
         dpids.remove(dpid)
         for remote_dpid in dpids:
-            self.tunnel_requests.add(dpid, remote_dpid)
+            #self.tunnel_requests.add(dpid, remote_dpid)
+            self.virtual_network_tunnel_requests.add(dpid, remote_dpid, network_id)
 
         tunnel_dp = self.tunnel_dpset.get(dpid)
         if tunnel_dp is None:
             return
-        self._add_tunnel_ports(tunnel_dp, dpids)
+        #self._add_tunnel_ports(tunnel_dp, dpids)
+        self._add_virtual_network_tunnel_ports(tunnel_dp, dpids, network_id)
 
     def _vm_port_del(self, network_id, dpid):
         self.logger.debug('_vm_port_del %s %s', network_id,

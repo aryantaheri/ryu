@@ -187,6 +187,7 @@ class OVSBridge(object):
         if key:
             options += ',key=%(key)s' % locals()
 #        TODO: Use constants for tunnels types
+#        TODO: Proper key distribution mechanisms should be applied here
         if tunnel_type == 'ipsec_gre':
             ipsec_psk = 'mypsk'
             options += ',psk=%s' % ipsec_psk

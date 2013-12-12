@@ -495,6 +495,7 @@ class GRETunnel(app_manager.RyuApp):
         remote_dpids = self.nw.get_dpids(network_id)
         remote_dpids.remove(dpid)
 
+        # Incoming traffic destined to this port
         # LOCAL_OUT_TABLE: unicast
         # live-migration: there can be two ports with same mac_address
         ports = self.nw.get_ports(dpid, network_id, mac_address)
@@ -505,6 +506,7 @@ class GRETunnel(app_manager.RyuApp):
         self.send_flow_mod(dp, rule, self.LOCAL_OUT_TABLE, ofproto.OFPFC_ADD,
                            self.LOCAL_OUT_PRI_MAC, actions)
 
+        # Broadcast traffic in this dpid for network nw should be 1) forwarded to all active ports
         # LOCAL_OUT_TABLE: broad cast
         rule = cls_rule(tun_id=tunnel_key, dl_dst=mac.BROADCAST)
         actions = []
