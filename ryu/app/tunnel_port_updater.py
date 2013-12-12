@@ -95,7 +95,7 @@ class TunnelPort(object):
         self.local_ip = local_ip
         self.remote_ip = remote_ip
         self.remote_dpid = remote_dpid
-        self.netword_id = network_id
+        self.network_id = network_id
 
     def __eq__(self, other):
         return (self.dpid == other.dpid and
@@ -103,7 +103,7 @@ class TunnelPort(object):
                 self.local_ip == other.local_ip and
                 self.remote_ip == other.remote_ip and
                 self.remote_dpid == other.remote_dpid and
-                self.netword_id == other.netword_id)
+                self.network_id == other.network_id)
         
     def __str__(self):
         return "TunnelPort: dpid=%s, port_no=%s, local_ip=%s, remote_ip=%s, remote_dpid=%s, network_id=%s" % (
