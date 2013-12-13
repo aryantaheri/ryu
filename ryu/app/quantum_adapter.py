@@ -113,6 +113,9 @@ class OVSPort(object):
         if (self.type == 'gre' and 'local_ip' in self.options and
                 'remote_ip' in self.options):
             return self.PORT_TUNNEL
+        if (self.type == 'ipsec_gre' and 'local_ip' in self.options and
+                'remote_ip' in self.options):
+            return self.PORT_TUNNEL
         if self.type == '' and 'vm-uuid' in self.ext_ids:
             return self.PORT_GUEST
         return self.PORT_UNKNOWN
