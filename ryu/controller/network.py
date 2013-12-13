@@ -334,11 +334,13 @@ class Network(app_manager.RyuApp):
         def _known_nw_id(nw_id):
             return nw_id is not None and nw_id != self.nw_id_unknown
 
+        self.logger.debug('Network._update_port network_id=%s, dpid=%s, port=%s, port_may_exist=%s', network_id, dpid, port, port_may_exist)
         queue_add_event = False
         self._check_nw_id_unknown(network_id)
         try:
             old_network_id = self.dpids.get_network_safe(dpid, port)
             self.logger.debug('Network._update_port old_network_id %s known %s', old_network_id, _known_nw_id(old_network_id))
+            self.logger.debug('Network._update_port networks.has_port(network_id=%s, dpid=%s, port=%s) %s', network_id, dpid, port, self.networks.has_port(network_id, dpid, port))
             if (self.networks.has_port(network_id, dpid, port) or
                     _known_nw_id(old_network_id)):
                 if not port_may_exist:
@@ -346,9 +348,11 @@ class Network(app_manager.RyuApp):
                                            dpid=dpid, port=port)
 
             if old_network_id != network_id:
+                self.logger.debug('Network._update_port add_raw(network_id=%s, dpid=%s, port=%s)', network_id, dpid, port)
                 queue_add_event = True
                 self.networks.add_raw(network_id, dpid, port)
                 if _known_nw_id(old_network_id):
+                    self.logger.debug('Network._update_port remove_raw(old_network_id=%s, dpid=%s, port=%s)', old_network_id, dpid, port)
                     self.networks.remove_raw(old_network_id, dpid, port)
         except KeyError:
             raise NetworkNotFound(network_id=network_id)

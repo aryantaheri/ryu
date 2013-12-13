@@ -191,11 +191,12 @@ class OVSBridge(object):
         if tunnel_type == 'ipsec_gre':
             ipsec_psk = 'mypsk'
             options += ',psk=%s' % ipsec_psk
-
+        
         command_add = ovs_vsctl.VSCtlCommand('add-port', (self.br_name, name))
         command_set = ovs_vsctl.VSCtlCommand(
             'set', ('Interface', name,
                     'type=%s' % tunnel_type, 'options=%s' % options))
+        LOG.debug('OVSBridge.add_tunnel_port run commands add=%s set=%s', command_add, command_set)
         self.run_command([command_add, command_set])
 
     def add_gre_port(self, name, local_ip, remote_ip, key=None):

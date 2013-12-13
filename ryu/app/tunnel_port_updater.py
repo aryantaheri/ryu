@@ -42,7 +42,8 @@ CONF.register_opts([
 
 _TUNNEL_TYPE_TO_NW_ID = {
     'gre': rest_nw_id.NW_ID_VPORT_GRE,
-    'ipsec_gre': rest_nw_id.NW_ID_VPORT_IPSEC_GRE,
+    #'ipsec_gre': rest_nw_id.NW_ID_VPORT_IPSEC_GRE,
+    'ipsec_gre': rest_nw_id.NW_ID_VPORT_GRE,
 }
 
 

@@ -760,6 +760,9 @@ class VSCtlCommand(object):
 
     def has_option(self, option):
         return option in self.options
+    
+    def __str__(self):
+        return 'VSCtlCommand command={0}, args={1}, options={2}'.format(self.command, self.args, self.options)
 
 
 class VSCtl(object):
